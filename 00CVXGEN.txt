@@ -1,0 +1,24 @@
+dimensions
+  dim_p = 9
+  J1 = 16
+  J2 = 16
+end
+
+parameters
+  H (dim_p - 1 + J1, dim_p - 1 +J1) psd
+  f (dim_p - 1 + J1, 1)
+  lb(dim_p - 1 + J1, 1)
+  ub(dim_p - 1 + J1, 1)
+end
+
+variables
+  x(dim_p - 1 + J1,1)
+end
+
+minimize
+  1/2*quad(x,H) + f'*x
+subject to
+  x <= ub
+  x[i]>= lb[i], i = 1..(dim_p - 1)
+end
+​
