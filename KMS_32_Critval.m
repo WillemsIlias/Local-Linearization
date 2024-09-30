@@ -24,7 +24,7 @@ function c_val = KMS_32_Critval(phi_test,f_ineq_keep,f_eq_keep,G_ineq,G_eq,Dg_in
 % INPUTS:
 %   phi_test            GMS function evaluated at theta_test
 %
-%   f_ineq_keep,f_eq_keep   Moments to keep
+%   f_ineq_keep,f_eq_keep   Moments to keep. Remember that it is assumed that m(W, theta) = f(W) + g(theta)
 %
 %   G_ineq,G_eq         Bootstrapped and recentered moments
 %
