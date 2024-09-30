@@ -211,6 +211,10 @@ if isempty(KMSoptions.BCS_EAM)
 end
 %% Model parameters
 % Compute model parameters implied by the user-specified input parameters.
+
+% NOTE: p is the projection vector. I.e. if interest is in finding an identified interval for the first component,
+%       one would specify p = (1, 0, ..., 0).
+
 dim_p = size(theta_0,1);     % Dimension of parameter of interest
 n     = size(W,1);           % Number of observations
 if size(p) ~=  size(theta_0)
@@ -221,6 +225,9 @@ p  = p/norm(p,2);
 
 % Empirical moments:
 % Estimator for E_P[f(W_i)], where E_P[m(W_i,theta)] = E_P[f(W_i)] + g(theta).
+
+% Note: here, moments that are separable in W_i and theta are considered.
+
 % Emprical moments are obtained first, as this defines the number of moment
 % conditions
 [f_ineq,f_eq,f_ineq_keep,f_eq_keep,paired_mom,J1,J2,J3,mData_ineq,mData_eq]  = moments_w(W,KMSoptions);
@@ -395,6 +402,14 @@ elseif parallel ==1
 end
 
 disp('Initial check complete')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                 Compute moments                                                             %
+%                                                                                                                             %
+% 1) Compute sample analogues of moment restrictions and their variance                                                       %
+% 2) Compute bootstrapped moments                                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% Additional parameters to add to KMSoptions
 addpath ./CVXGEN                                                % MEX files for CVXGEN
 addpath ./dace                                                  % DACE parameter (A-step in EAM)
@@ -433,27 +448,11 @@ KMSoptions.CI_method     = CI_method;                           % Confidence int
 
 e_points_init           = KMSoptions.e_points_init;
 
+% BCS_EAM == 1 iff EAM should be applied to BCS profiling. Else, it equals zero.
 BCS_EAM = KMSoptions.BCS_EAM;
-mbase = KMSoptions.mbase;
 
-%% Re-centered Empirical Process
-% (See Pg 8, eq 2.6)
-% We compute the re-centered empirical process G.  This can be done
-% outside of the EAM loop in the separable case.  The bth recentered
-% empirical process is:
-%
-%       G_{ib} = sqrt(n)( (1/n) sum_i (f_j(W_i^b) -  f_j)/sigma_j
-%
-% for b=1,...,B.  G_{ib} is moment i evaluated at the bootstrapped data W^b
-% subtract the the empirical mean of the bootstrapped data,
-% (1/n)sum_if_j(W_i), normalized by the standard deviation.
-%
-% Note that the mean of the empirical distribution has already been
-% obtained, and is equal to f_ineq, f_eq.
-%
-% BOOTSTRAP:
-% Input is the data matrix W.  We output moments
-% computed on bootstrapped data
+% mbase: parameter related to the number of initial points to choose in EAM algorithm.
+mbase = KMSoptions.mbase;
 
 if BCS_EAM == 1
     % Initialization of simulator %
@@ -466,7 +465,11 @@ if BCS_EAM == 1
     [f_stdev_ineq,f_stdev_eq]= moments_stdev(W,f_ineq,f_eq,J1,J2,KMSoptions);
     f_stdev_ineq = max(siglb,f_stdev_ineq);
     f_stdev_eq = max(siglb,f_stdev_eq);
+    
     % Truncate standard errrors
+
+    % NOTE: Standard errors are truncated from below! (siglb = 1e-4)
+    
     f_stdev_ineq = max(siglb,f_stdev_ineq);
     f_stdev_eq = max(siglb,f_stdev_eq);
 
@@ -546,6 +549,11 @@ RandStream.setGlobalStream(stream);
 stream.Substream = B + B*10^3 + 1;
 
 disp('Computed moments, starting feasibility check')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                      Feasibility check of given initial points                                              %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% Feasibility
 % If the user specifies a set of feasible points, theta_feas, we check that
 % these points are feasible for the problem.  We also order the
@@ -562,6 +570,10 @@ if ~isempty(theta_feas)
     [~,I] = sort(val_feas,'descend');
     theta_feas = theta_feas(I,:);
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                              Perform EAM algorithm                                                          %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% EAM - Jones' Method
 % The EAM algorithm is based on Jones' Method.  The algorithm is executed
@@ -594,11 +606,15 @@ end
 % We run the EAM algorithm in direction p and -p to find the upper and
 % lower bounds, respectively.
 
-% Auxilary Search For Feasible Point
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Auxilary Search For Feasible Point, if no feasible point was provided by the user %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % We first perform an auxilary search to find a feasible point.  The same
 % point can be used for the upper and lower bound.  If we find more than
 % one feasible point we will select the best point according to the rule:
 %   min/max p'theta
+
 disp('Feasible Search')
 % Count time EAM
 t_EAM = tic;
@@ -647,7 +663,11 @@ else
     KMS_output.thetafeasU = theta_feas(1,:);
     KMS_output.thetafeasL = theta_feas(1,:);
 end
-theta_feas =  unique(theta_feas,'rows'); 
+theta_feas =  unique(theta_feas,'rows');
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Auxilary Search For Feasible Point, if no feasible point was provided by the user %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Draw sample points (we do this outside of the loop for speed) 
 stream=RandStream('mlfg6331_64','Seed',seed);
@@ -666,6 +686,11 @@ else
         theta_add = KMS_AUX2_drawpoints(e_points_init,dim_p,LB_theta,UB_theta,KMSoptions,A_theta,b_theta,theta_feas.');
     end
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Note: in the lines below, the test is carried out. Might be useful to study this function separately.                                            %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 [c_add,CV_add,theta_add,maxviol_add]     = KMS_31_Estep(theta_add,f_ineq,f_eq,f_ineq_keep,f_eq_keep,f_stdev_ineq,f_stdev_eq,G_ineq,G_eq,KMSoptions);
 [c_feas,CV_feas,theta_feas,maxviol_feas] = KMS_31_Estep(theta_feas,f_ineq,f_eq,f_ineq_keep,f_eq_keep,f_stdev_ineq,f_stdev_eq,G_ineq,G_eq,KMSoptions);
