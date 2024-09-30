@@ -178,7 +178,7 @@ KMSoptions.type          = [];
 KMSoptions.e_points_init = [];
 KMSoptions.CVXGEN_name   = [];
 KMSoptions.CI_method     = [];
-KMSoptions.component    = [];
+KMSoptions.component    = [];                                            % (Placeholder for) the index of the covariate element of interest, i.e. the one for which we want to find the identified interval.
 
 %% Options for simulation/application to be filled out in script that calls
 % the simulation/application
