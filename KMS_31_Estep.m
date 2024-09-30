@@ -20,13 +20,17 @@ function [c_Estep,CV_Estep,theta_Estep,max_violation] = KMS_31_Estep(theta_Estep
 %   theta_Estep         K-by-dim_p matrix.  Each row is a parameter vector
 %                       from the parameter space [theta_lo,theta_hi].
 %
-%   f_ineq, f_eq        Empirical moments
+%   f_ineq, f_eq        Empirical moments. Note that since the moment function is assumed to be separable as m(W, \theta) = f(W) + g(\theta),
+%                       these arguments only pertain to the first term in that sum.
 %
 %   f_ineq_keep,f_eq_keep       Moments to keep
 %
 %   f_stdev_ineq,f_stdev_eq     Standard deviation of moments
 %
-%   G_ineq,G_eq         Bootstrapped and recentered moments
+%   G_ineq,G_eq         Bootstrapped and recentered moments. That is, \sqrt{n} \bar{m}_n(\theta)/\sigma_n(\theta), the argument supplied
+%                       to the S-function. Note that, due to the assumed separability between W and \theta of the moment functions, these
+%                       arguments simply relate to \sqrt{n} \bar{m}_n/\sigma_n. See also the explanation for the arguments f_ineq and
+%                       f_eq. 
 %
 %   KMSoptions.         This is a structure of additional inputs held
 %                       constant over the program.  In the 2x2 entry game,
@@ -72,6 +76,10 @@ max_violation = zeros(dim_e,1);
 flag_conv_BCS = zeros(dim_e,1);
 
 %% Calculate critical value for each theta_l, l=1,...,dim_e
+
+% NOTE: All values of theta for which the test should be run are specified as rows of the matrix theta_Estep.
+% NOTE: Evaluation of all thetas to check can be (and is) done in parallel.
+
 if parallel == 1 && BCS_EAM ~= 1
     % Run parfor if we are running parallel program
     parfor ll = 1:dim_e
@@ -93,6 +101,10 @@ if parallel == 1 && BCS_EAM ~= 1
         
         % Compute theoretical bounds g(theta).
         % These theoretical enter the GMS function in Eq 2.8.
+        
+        % NOTE: Since the moment functions are assumed to be separable, as m(W, \theta) = m_1(W) + g(\theta) and m_1(W)
+        %       has already been computed, g(\theta) remains to be computed.
+        
         [g_ineq,g_eq] = moments_theta(theta_test,J1,J2,KMSoptions);
         
         % Measure of close to binding (Equation 2.8)
@@ -151,16 +163,6 @@ if parallel == 1 && BCS_EAM ~= 1
         % 4) Compute rho polytope constraints
         [A_rho,b_rho] = Rho_Polytope_Box(theta_test,KMSoptions);
         
-        %         % 5) Compute critical value
-        %         if BCS_EAM == 1
-        %             try
-        %                 lambda = theta_test(component);
-        %                 c_Estep(ll,1) = BCS_32_Critval(lambda,component,KMSoptions);
-        %             catch
-        %                 c_Estep(ll,1) = 0;
-        %                 flag_conv_BCS(ll,1) = -1;
-        %             end
-        %         else
         % 5) Compute critical value
         % This follows the algorithm on page 11. Essentially, the
         % algorithm is a root-finding algorithm that finds the root to the
@@ -169,13 +171,16 @@ if parallel == 1 && BCS_EAM ~= 1
         c_Estep(ll,1) = KMS_32_Critval(phi_test,f_ineq_keep,f_eq_keep,G_ineq,G_eq,Dg_ineq,Dg_eq,A_rho,b_rho,theta_test,KMSoptions);
         
         % 6) Constraint violation
-        % Standardized moments
+        % Standardized moments.
+        % NOTE: m(W, \theta) = f(W) + g(theta), and \sigma(W, \theta) = \sigma(W)
+        
         m_theta = sqrt(n)*(([f_ineq;f_eq] + [g_ineq;g_eq])./[f_stdev_ineq;f_stdev_eq]);
         
         % Drop moments with value of f(W) close to boundary
         f_keep = [f_ineq_keep;f_eq_keep];
         m_theta(f_keep == 0,:) = [];
-        
+
+        % Constraint violation (not critical value). \theta is feasible iff CV_Estep = 0.
         CV_Estep(ll,1) = sum(max(0,m_theta-c_Estep(ll,1)).^2);
         
         % Maximum violation:
@@ -258,6 +263,8 @@ elseif (BCS_EAM == 1) && (LL_EAM==1)
         
         % 4) Compute rho polytope constraints
         [A_rho,b_rho] = Rho_Polytope_Box(theta_test,KMSoptions);
+
+        % NOTE: Because LL_EAM == 1 in this part of the outer if-...-else case distrinction, BCS_32_Critval is ran (not KMS_32_Critval)
         
         try
             lambda = theta_test(component);
@@ -367,6 +374,10 @@ else
         
         % 4) Compute rho polytope constraints
         [A_rho,b_rho] = Rho_Polytope_Box(theta_test,KMSoptions);
+
+        % 5) Compute critical value
+
+        % NOTE: Again note the difference in using BCS_ -or KMS_32_Critval
         
         if BCS_EAM == 1
             try
@@ -382,11 +393,6 @@ else
                 g_lambda = [];
             end
         else
-            % 5) Compute critical value
-            % This follows the algorithm on page 11. Essentially, the
-            % algorithm is a root-finding algorithm that finds the root to the
-            % function h(c) = (1/n) sum_b psi_b(c) - (1-alpha).  If h(c) = 0,
-            % then the coverage of 1-alpha is obtained at theta_test.
             c_Estep(ll,1) = KMS_32_Critval(phi_test,f_ineq_keep,f_eq_keep,G_ineq,G_eq,Dg_ineq,Dg_eq,A_rho,b_rho,theta_test,KMSoptions);
         end
         
