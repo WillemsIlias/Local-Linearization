@@ -1,9 +1,11 @@
 function [psi_1] = KMS_33_Coverage(c_1,psi_0,psi_2,phi_test,f_ineq_keep,f_eq_keep,G_ineq,G_eq,Dg_ineq,Dg_eq,A_rho,b_rho,theta,KMSoptions)
 %% Coverage Function
 % This function computes the psi function in Equation (2.12) evaluated at
-% c_1.  psi(c) is a Bx1 vector of indicator functions.  The bbth element in
+% c_1.  psi(c) is a (B x 1)-vector of indicator functions.  The bbth element in
 % psi(c) is equal to one iff the constraint set intersects the hyperplane
 % p'lambda = 0.
+%
+% NOTE: The 'psi function' probably refers to notation in an earlier draft of the paper.
 %
 % INPUTS:
 %   c_1                 Current iteration's critical value
