@@ -56,6 +56,9 @@ if DGP == 20
 
     % solve numerical minimization for all starting values;
     for s=1:size(starting_values,1)
+        % NOTE: Qn_function defines the S-function. It assumes the coefficient vector to be 2-dimensional. 'x' represents the subvector of 'free'
+        % coefficients. 'theta_H0' represents the value of the element of the coefficient vector that is fixed (also denoted 'lambda' above) That
+        % is, the one for which we are testing whether there exists a coefficient vector with 'lambda' as its 'coordinate'-th component. 
         [theta_aux,Qn_aux,bandera] =  fmincon(@(x) Qn_function(x,theta_H0,coordinate,data,p,DGP),...
             starting_values(s,:),[],[],[],[],lbi,ubi,[],options);
         % check whether minimization is successful and reduced value
@@ -69,7 +72,8 @@ if DGP == 20
         end
     end
 
-     % at the end of the minimizations, we should have a minimizer
+     % at the end of the minimizations, we should have a minimizer 'theta_prof', and a corresponding minimal value
+     % of the test statistic 'minQn'.
     if ~isempty(Qn_minimizer)
         minQn = min_value;
         theta_prof = [Qn_minimizer(1:coordinate-1)';lambda;Qn_minimizer(coordinate:end)'];
@@ -98,17 +102,23 @@ if DGP == 20
         settings.eps = 1e-9;  % reduce the required objective tolerance, from 1e-6.
             
         for kk = 1:size(In_identified_set_hat,1)
-         
+
+            % Recreate the full parameter vector theta_hat based on the values of the non-restricted elements for which the
+            % S-function is minimized.
             t_hat_other = In_identified_set_hat(kk,:);
             t_hat = [t_hat_other(1:coordinate-1),theta_H0,t_hat_other(coordinate:end)];          
-             
+
+            % Compute the (standardized) moments
             [g_ineq, g_eq] = moments_theta(t_hat',p,k-p,KMSoptions);
             std_hat = [f_stdev_ineq; f_stdev_eq(1:k-p)]; % column vector
             mbar_std = [ -(f_ineq + g_ineq) ; (f_eq(1:p) + g_eq(1:p))]'./std_hat'; % KMS have opposite sign for inequalities 
-            
+
+            % Compute the GMS function
             phi = zeros(1,size(std_hat,1));
             phi(1:p) = max(sqrt(n)*mbar_std(1:p)/kappa,0);   
- 
+
+            % Not sure, but this likely computes the matrix G_n as in the algorithm in Bei, 2024. Note again that because m(W, theta) =
+            % f(W) + g(theta), std_hat does not depend on theta and can hence be taken out of the derivative.
             Jacobian = diag(std_hat)^(-1)*getgradient(t_hat);
             Jacobian(:, coordinate) = [];        
             Jbar = [Jacobian  [eye(p); zeros(k-p,p)]];
